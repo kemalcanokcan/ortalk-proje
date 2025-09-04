@@ -8,6 +8,7 @@ import subprocess
 import sys
 import webbrowser
 import time
+import os
 
 def main():
     print("🚀 E-Fatura PDF Analiz Sistemi")
@@ -22,6 +23,13 @@ def main():
     print()
     
     try:
+        # Mevcut script'in bulunduğu dizine geç
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        os.chdir(script_dir)
+        print(f"📁 Çalışma dizini: {os.getcwd()}")
+        print(f"🔍 main.py dosyası mevcut mu: {os.path.exists('main.py')}")
+        print()
+        
         # 2 saniye sonra tarayıcıyı aç
         def open_browser():
             time.sleep(2)
