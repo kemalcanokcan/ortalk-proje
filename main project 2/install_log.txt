@@ -1,2 +1,0 @@
-Running command: C:\Program Files\Python313\python.exe -m pip install --user -r requirements.txt
-
