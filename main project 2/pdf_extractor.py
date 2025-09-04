@@ -7,6 +7,14 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+def extract_firma_adi(text, max_lines=1):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return "Bulunamadı"
+    # İlk max_lines satırı birleştir
+    firma_adi = " ".join(lines[:max_lines])
+    return firma_adi
+
 class PDFExtractor:
     def __init__(self, pdf_path):
         """Initialize the PDF extractor with the path to the PDF file"""
@@ -69,6 +77,7 @@ class PDFExtractor:
             logger.error(f"Error extracting tables from PDF: {str(e)}")
             raise Exception(f"PDF'den tablo çıkarılırken hata oluştu: {str(e)}")
     
+
     def extract_invoice_data(self):
         """Extract structured invoice data from the PDF"""
         try:
@@ -106,6 +115,9 @@ class PDFExtractor:
                 'total_amount': '',
                 'notes': ''
             }
+
+            invoice_data['vendor_name'] = extract_firma_adi(self.text_content, max_lines=1)
+            logger.info(f"Extracted vendor name: {invoice_data['vendor_name']}")
             
             # Extract invoice number - Multiple patterns
             invoice_number_patterns = [
@@ -234,6 +246,10 @@ class PDFExtractor:
                             invoice_data['vendor_name'] = vendor_name
                             logger.info(f"Extracted vendor name: {vendor_name}")
                             break
+                
+                
+                
+                
                 
                 # Extract vendor tax ID - Try multiple patterns
                 vendor_tax_match = re.search(r'VKN[:\s]*(\d+)', vendor_text)
