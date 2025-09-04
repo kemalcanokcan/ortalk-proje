@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice>
+  <InvoiceNumber>INV-2024-001</InvoiceNumber>
+  <IssueDate>2024-04-15</IssueDate>
+  <Seller>
+    <Name>ABC Technology Ltd. Şti.</Name>
+    <VKN>1234567890</VKN>
+  </Seller>
+  <Buyer>
+    <Name>XYZ Corporation A.Ş.</Name>
+    <VKN>9876543210</VKN>
+  </Buyer>
+  <Items>
+    <Item>
+      <Description>Bilgisayar Donanım Hizmetleri</Description>
+      <Quantity>2.00</Quantity>
+      <UnitPrice>1500.00</UnitPrice>
+      <VAT>18</VAT>
+      <Total>3000.00</Total>
+    </Item>
+    <Item>
+      <Description>Yazılım Lisans Hizmetleri</Description>
+      <Quantity>1.00</Quantity>
+      <UnitPrice>2500.00</UnitPrice>
+      <VAT>18</VAT>
+      <Total>2500.00</Total>
+    </Item>
+  </Items>
+  <TotalAmount>6490.00</TotalAmount>
+  <Currency>TRY</Currency>
+</Invoice>

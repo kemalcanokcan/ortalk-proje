@@ -1,0 +1,13 @@
+--- FAILURE ---
+Failed to import 'thefuzz' library.
+Error: No module named 'thefuzz'
+Python Executable: C:\Program Files\Python313\python.exe
+
+--- sys.path ---
+C:\Users\kemal\OneDrive\Masaüstü\main project 2
+C:\Program Files\Python313\python313.zip
+C:\Program Files\Python313\DLLs
+C:\Program Files\Python313\Lib
+C:\Program Files\Python313
+C:\Users\kemal\AppData\Roaming\Python\Python313\site-packages
+C:\Program Files\Python313\Lib\site-packages

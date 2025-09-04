@@ -1,0 +1,38 @@
+{
+    "invoice_number": "JSON-2024-001",
+    "invoice_date": "15/01/2024",
+    "vendor_name": "Tech Solutions AŞ",
+    "vendor_tax_id": "1234567890",
+    "vendor_address": "Teknoloji Caddesi No: 123, Ankara",
+    "customer_name": "Digital Corp Ltd",
+    "customer_tax_id": "0987654321", 
+    "customer_address": "İş Merkezi Bulvarı No: 456, İstanbul",
+    "line_items": [
+        {
+            "description": "Software License",
+            "quantity": 2,
+            "unit_price": 1500.00,
+            "tax_rate": "18%",
+            "amount": 3000.00
+        },
+        {
+            "description": "Technical Support",
+            "quantity": 1,
+            "unit_price": 800.00,
+            "tax_rate": "KDV %20",
+            "amount": 800.00
+        },
+        {
+            "description": "Hardware Installation",
+            "quantity": 3,
+            "unit_price": 250.00,
+            "tax_rate": "510%",
+            "amount": 750.00
+        }
+    ],
+    "subtotal": 4550.00,
+    "tax_amount": 819.00,
+    "total_amount": 5369.00,
+    "currency": "TRY",
+    "notes": "Payment due within 30 days"
+}
