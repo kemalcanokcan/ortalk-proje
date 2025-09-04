@@ -218,36 +218,6 @@ class PDFExtractor:
                 vendor_text = vendor_section.group(1)
                 
                 # Enhanced vendor name extraction
-                vendor_name = None
-                vendor_name_patterns = [
-                    # Specific company patterns
-                    r'(DEVLET\s+MALZEME\s+OFİSİ[^VKN\n]*)',
-                    r'(.*?(?:LTD|AŞ|ŞTİ|A\.Ş|LTD\.ŞTİ)\.?)',
-                    r'(.*?(?:LIMITED|ANONIM|ŞIRKETI))',
-                    
-                    # General patterns
-                    r'^([A-ZÜĞŞIÖÇK\s]{3,}?)(?=\s*VKN|\s*TAX|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n|$)',
-                    r'^([A-ZÜĞŞIÖÇK][A-ZÜĞŞIÖÇa-züğşıöç\s]{10,}?)(?=\s*\n|\s*VKN)',
-                    r'^(.*?)(?=\n.*VKN|\n.*Tel|\n.*Fax)',
-                    
-                    # Fallback
-                    r'^([^\n]{10,})'
-                ]
-                
-                for pattern in vendor_name_patterns:
-                    vendor_name_match = re.search(pattern, vendor_text.strip(), re.IGNORECASE | re.MULTILINE)
-                    if vendor_name_match:
-                        vendor_name = vendor_name_match.group(1).strip()
-                        # Clean up the name
-                        vendor_name = re.sub(r'\s+', ' ', vendor_name)  # Multiple spaces
-                        vendor_name = re.sub(r'^[:\-\s]+|[:\-\s]+$', '', vendor_name)  # Leading/trailing symbols
-                        
-                        if len(vendor_name) >= 5 and not re.match(r'^\d+$', vendor_name):
-                            invoice_data['vendor_name'] = vendor_name
-                            logger.info(f"Extracted vendor name: {vendor_name}")
-                            break
-                
-                
                 
                 
                 
