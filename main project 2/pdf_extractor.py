@@ -256,13 +256,20 @@ class PDFExtractor:
                 logger.info("No vendor section found, trying fallback methods...")
                 self._extract_vendor_fallback(invoice_data)
             
-            # Enhanced customer information extraction
+            # Enhanced customer information extraction with comprehensive patterns
             customer_section = None
             customer_patterns = [
+                # Primary customer indicators (case-sensitive as requested)
+                r'SAYIN\s*(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|FATURA\s+NO|TOPLAM|$)',
+                r'SAYIN\s*(.*?)(?=\n\s*[A-ZÜĞŞIÖÇ]{3,}|\n\s*\d|$)',
+                
                 # Standard patterns
                 r'ALICI\s*:?\s*\n(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|FATURA\s+NO|TOPLAM|$)',
                 r'BUYER\s*:?\s*\n(.*?)(?=ITEM|PRODUCT|SERVICE|INVOICE|TOTAL|$)',
                 r'MÜŞTERI\s*:?\s*\n(.*?)(?=ÜRÜN|HIZMET|TOPLAM|$)',
+                r'ALICI\s*:?\s*(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|FATURA\s+NO|TOPLAM|$)',
+                r'BUYER\s*:?\s*(.*?)(?=ITEM|PRODUCT|SERVICE|INVOICE|TOTAL|$)',
+                r'MÜŞTERI\s*:?\s*(.*?)(?=ÜRÜN|HIZMET|TOPLAM|$)',
                 
                 # Company-specific patterns
                 r'(ETİ\s+MADEN.*?)(?=e-FATURA|Sıra\s+No|MALZEME|$)',
@@ -272,9 +279,28 @@ class PDFExtractor:
                 # VKN-based patterns for customer
                 r'(?:ALICI|BUYER).*?(.*?VKN\s*:?\s*\d{10}.*?)(?=MALZEME|ÜRÜN|$)',
                 
+                # Address-based customer identification
+                r'(.*?KIZILIRMAK\s+MAH.*?ÇUKURAMBAR.*?ANKARA)(?=MALZEME|ÜRÜN|$)',
+                r'(.*?ÇUKURAMBAR.*?ANKARA)(?=MALZEME|ÜRÜN|$)',
+                r'(.*?06530.*?ANKARA)(?=MALZEME|ÜRÜN|$)',
+                
                 # Fallback patterns
                 r'(?:ALICI|BUYER)(.*?)(?=\n\s*\d|\n\s*[A-Z]{3,})',
-                r'(.*?)(?=Malzeme|MALZEME|ÜRÜN|HIZMET)'
+                r'(.*?)(?=Malzeme|MALZEME|ÜRÜN|HIZMET)',
+                
+                # Generic customer section after vendor
+                r'(?:VKN|Vergi|Tel|E-Posta).*?\n(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|$)',
+                
+                # Additional patterns for different font positions and variations
+                r'SAYIN\s*([A-ZÜĞŞIÖÇ\s]+?)(?=\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n|$)',
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)'
             ]
             
             for pattern in customer_patterns:
@@ -519,22 +545,110 @@ class PDFExtractor:
                     logger.info(f"Found subtotal: {invoice_data['subtotal']}")
                     break
             
-            # Tax amount patterns
+            # Enhanced KDV extraction patterns - multiple formats and positions
             tax_patterns = [
+                # Standard KDV patterns
                 r'Hesaplanan\s+KDV\s*:?\s*([0-9.,]+)',
                 r'HESAPLANAN\s+KDV\s*:?\s*([0-9.,]+)',
                 r'KDV\s+Tutarı\s*:?\s*([0-9.,]+)',
                 r'KDV\s+TUTARI\s*:?\s*([0-9.,]+)',
                 r'Vergi\s+Tutarı\s*:?\s*([0-9.,]+)',
-                r'Tax\s+Amount\s*:?\s*([0-9.,]+)'
+                r'Tax\s+Amount\s*:?\s*([0-9.,]+)',
+                
+                # KDV with percentage patterns (from invoice photos)
+                r'KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*:?\s*([0-9.,]+)',
+                r'KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*Matrahı\s*:?\s*([0-9.,]+)',
+                r'KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*Tutarı\s*:?\s*([0-9.,]+)',
+                r'Hesaplanan\s+KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*\(%(\d+(?:[.,]\d+)?)\)\s*:?\s*([0-9.,]+)',
+                
+                # KDV percentage patterns
+                r'KDV\s*Oranı\s*:?\s*%(\d+(?:[.,]\d+)?)',
+                r'KDV\s*ORANI\s*:?\s*%(\d+(?:[.,]\d+)?)',
+                r'%(\d+(?:[.,]\d+)?)\s*KDV',
+                r'KDV\s*%(\d+(?:[.,]\d+)?)',
+                
+                # KDV amount with currency
+                r'KDV\s*Tutarı\s*:?\s*([0-9.,]+)\s*TL',
+                r'KDV\s*TUTARI\s*:?\s*([0-9.,]+)\s*TL',
+                r'([0-9.,]+)\s*TL\s*KDV',
+                
+                # Generic KDV patterns
+                r'KDV\s*:?\s*([0-9.,]+)',
+                r'KDV\s*:?\s*%(\d+(?:[.,]\d+)?)',
+                r'%(\d+(?:[.,]\d+)?)\s*KDV\s*:?\s*([0-9.,]+)',
+                
+                # Fallback: any number followed by % that could be KDV
+                r'(\d+(?:[.,]\d+)?)\s*%\s*(?:KDV|Vergi|Tax)',
+                r'(?:KDV|Vergi|Tax)\s*(\d+(?:[.,]\d+)?)\s*%',
+                
+                # Additional patterns for different font positions
+                r'KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*:?\s*([0-9.,]+)',
+                r'KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*Matrahı\s*:?\s*([0-9.,]+)',
+                r'KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*Tutarı\s*:?\s*([0-9.,]+)',
+                r'Hesaplanan\s+KDV\s*\(%(\d+(?:[.,]\d+)?)\)\s*\(%(\d+(?:[.,]\d+)?)\)\s*:?\s*([0-9.,]+)',
+                r'KDV\s*Oranı\s*:?\s*%(\d+(?:[.,]\d+)?)',
+                r'KDV\s*ORANI\s*:?\s*%(\d+(?:[.,]\d+)?)',
+                r'%(\d+(?:[.,]\d+)?)\s*KDV',
+                r'KDV\s*%(\d+(?:[.,]\d+)?)',
+                r'KDV\s*Tutarı\s*:?\s*([0-9.,]+)\s*TL',
+                r'KDV\s*TUTARI\s*:?\s*([0-9.,]+)\s*TL',
+                r'([0-9.,]+)\s*TL\s*KDV',
+                r'KDV\s*:?\s*([0-9.,]+)',
+                r'KDV\s*:?\s*%(\d+(?:[.,]\d+)?)',
+                r'%(\d+(?:[.,]\d+)?)\s*KDV\s*:?\s*([0-9.,]+)',
+                r'(\d+(?:[.,]\d+)?)\s*%\s*(?:KDV|Vergi|Tax)',
+                r'(?:KDV|Vergi|Tax)\s*(\d+(?:[.,]\d+)?)\s*%'
             ]
             
+            # Enhanced KDV extraction with multiple patterns
+            kdv_extracted = False
             for pattern in tax_patterns:
                 tax_match = re.search(pattern, self.text_content, re.IGNORECASE)
                 if tax_match:
-                    invoice_data['tax_amount'] = self._clean_number(tax_match.group(1))
-                    logger.info(f"Found tax amount: {invoice_data['tax_amount']}")
-                    break
+                    groups = tax_match.groups()
+                    
+                    # Handle different pattern types
+                    if len(groups) == 1:
+                        # Simple KDV amount or percentage
+                        value = groups[0]
+                        if '%' in pattern or 'Oranı' in pattern or 'ORANI' in pattern:
+                            # This is a KDV rate, not amount
+                            invoice_data['tax_rate'] = self._clean_number(value)
+                            logger.info(f"Found KDV rate: {invoice_data['tax_rate']}%")
+                        else:
+                            # This is a KDV amount
+                            invoice_data['tax_amount'] = self._clean_number(value)
+                            logger.info(f"Found KDV amount: {invoice_data['tax_amount']}")
+                            kdv_extracted = True
+                    
+                    elif len(groups) == 2:
+                        # KDV with percentage and amount
+                        if 'Matrahı' in pattern:
+                            # KDV Matrahı pattern
+                            invoice_data['tax_rate'] = self._clean_number(groups[0])
+                            invoice_data['tax_base'] = self._clean_number(groups[1])
+                            logger.info(f"Found KDV rate: {invoice_data['tax_rate']}% and base: {invoice_data['tax_base']}")
+                        else:
+                            # KDV percentage and amount
+                            invoice_data['tax_rate'] = self._clean_number(groups[0])
+                            invoice_data['tax_amount'] = self._clean_number(groups[1])
+                            logger.info(f"Found KDV rate: {invoice_data['tax_rate']}% and amount: {invoice_data['tax_amount']}")
+                            kdv_extracted = True
+                    
+                    elif len(groups) == 3:
+                        # Complex KDV pattern with multiple percentages
+                        invoice_data['tax_rate'] = self._clean_number(groups[0])
+                        invoice_data['tax_amount'] = self._clean_number(groups[2])
+                        logger.info(f"Found KDV rate: {invoice_data['tax_rate']}% and amount: {invoice_data['tax_amount']}")
+                        kdv_extracted = True
+                    
+                    # If we found KDV amount, we can break
+                    if kdv_extracted:
+                        break
+            
+            # If no KDV amount found, try to extract from line items
+            if not kdv_extracted:
+                self._extract_kdv_from_line_items(invoice_data)
             
             # Total amount patterns
             total_patterns = [
@@ -615,21 +729,49 @@ class PDFExtractor:
         
         # Strategy 1: Company-specific address patterns
         company_address_patterns = [
-            # DMO patterns
+            # DMO patterns (vendor - top section)
             r'(06570\s+İnönü\s+Bulvarı.*?Yücetepe.*?ANKARA)',
             r'(İnönü\s+Bulvarı.*?No\s*:?\s*18.*?Yücetepe.*?ANKARA)',
             r'(Yücetepe.*?İnönü.*?Bulvarı.*?ANKARA)',
+            r'(İnönü\s+Bulvarı\s+No\s*:?\s*18.*?Yücetepe.*?ANKARA)',
             
-            # Eti Maden patterns
+            # Eti Maden patterns (customer - middle section)
             r'(06530\s+KIZILIRMAK\s+MAH\..*?ÇUKURAMBAR.*?ANKARA)',
             r'(Kızılırmak\s+Mahallesi.*?1443.*?Cadde.*?Çukurambar.*?ANKARA)',
             r'(1443\.\s*Cadde.*?Kızılırmak.*?ANKARA)',
+            r'(KIZILIRMAK\s+MAH\..*?1443\.\s*CADDE.*?ÇUKURAMBAR.*?ANKARA)',
             
-            # Generic Turkish address patterns
+            # GBA Bilişim patterns (vendor)
+            r'(KONUTKENT\s+MAH\..*?ÇAYYOLU.*?ANKARA)',
+            r'(KONUTKENT\s+MAH\..*?3028.*?CADDE.*?ÇAYYOLU.*?ANKARA)',
+            
+            # Generic Turkish address patterns with postal codes
             r'(\d{5}\s+[A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi).*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
             r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi).*?\d+\.\s*(?:CADDE|Cadde|Cad).*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
             r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:BULVARI|Bulvarı|Bulvar).*?No\s*:?\s*\d+.*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
-            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:SOKAK|Sokak|Sok).*?[A-ZÜĞŞIÖÇa-züğşıöç]+)' 
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:SOKAK|Sokak|Sok).*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            
+            # Address patterns from invoice photos
+            r'(\d{5}\s+[A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi).*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi).*?\d+\.\s*(?:CADDE|Cadde|Cad).*?No\s*:?\s*\d+.*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:BULVARI|Bulvarı|Bulvar).*?No\s*:?\s*\d+.*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:SOKAK|Sokak|Sok).*?No\s*:?\s*\d+.*?[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            
+            # City/district patterns
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s*/\s*[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            
+            # Additional patterns for different font positions and variations
+            r'(\d{5}\s+[A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi)\.?.*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi)\.?\s+\d+\.?\s*(?:CADDE|Cad|Sokak|Sok).*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:Bulvar|Bulvarı|Caddesi|Sokağı).*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s*/\s*[A-ZÜĞŞIÖÇa-züğşıöç]+\s*(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'(\d{5}\s+[A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi)\.?.*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:MAH|Mah|Mahallesi)\.?\s+\d+\.?\s*(?:CADDE|Cad|Sokak|Sok).*?No\s*:?\s*\d+.*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:BULVARI|Bulvarı|Bulvar).*?No\s*:?\s*\d+.*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+(?:SOKAK|Sokak|Sok).*?No\s*:?\s*\d+.*?(?:ANKARA|İSTANBUL|İZMİR|BURSA|ANTALYA|ADANA|KONYA))',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s*/\s*[A-ZÜĞŞIÖÇa-züğşıöç]+)',
+            r'([A-ZÜĞŞIÖÇa-züğşıöç]+\s+[A-ZÜĞŞIÖÇa-züğşıöç]+)'
         ]
         
         for pattern in company_address_patterns:
@@ -687,36 +829,60 @@ class PDFExtractor:
         return unique_addresses
     
     def _separate_vendor_customer_addresses(self, addresses, invoice_data):
-        """Precisely separate addresses into vendor and customer based on content"""
+        """Precisely separate addresses into vendor and customer based on content and position"""
         vendor_addresses = []
         customer_addresses = []
+        
+        # First, analyze the PDF structure to understand address positions
+        pdf_structure = self._analyze_pdf_structure()
         
         for addr in addresses:
             addr_lower = addr.lower()
             
-            # Precise vendor identification
+            # Precise vendor identification (top section addresses)
             is_vendor = False
             is_customer = False
             
-            # DMO (Devlet Malzeme Ofisi) patterns - always vendor
+            # DMO (Devlet Malzeme Ofisi) patterns - always vendor (top section)
             if any(word in addr_lower for word in ['yücetepe', 'inönü bulvar', '06570']):
                 is_vendor = True
                 logger.info(f"Identified as VENDOR (DMO pattern): {addr}")
             
-            # Eti Maden patterns - always customer  
+            # Eti Maden patterns - always customer (middle section)  
             elif any(word in addr_lower for word in ['kızılırmak', 'çukurambar', '06530', '1443']):
                 is_customer = True
                 logger.info(f"Identified as CUSTOMER (Eti Maden pattern): {addr}")
             
-            # GBA Bilişim patterns - vendor for GBA invoices
+            # GBA Bilişim patterns - vendor for GBA invoices (top section)
             elif 'konutkent' in addr_lower and 'çayyolu' in addr_lower:
                 is_vendor = True
                 logger.info(f"Identified as VENDOR (GBA pattern): {addr}")
             
-            # General business address patterns
-            elif any(word in addr_lower for word in ['ltd', 'şti', 'a.ş', 'bilişim', 'yazılım']):
-                is_vendor = True
-                logger.info(f"Identified as VENDOR (business pattern): {addr}")
+            # Address position analysis for unknown patterns
+            else:
+                addr_position = self._get_address_position_in_pdf(addr)
+                if addr_position == 'top':
+                    is_vendor = True
+                    logger.info(f"Identified as VENDOR (top position): {addr}")
+                elif addr_position == 'middle':
+                    is_customer = True
+                    logger.info(f"Identified as CUSTOMER (middle position): {addr}")
+                else:
+                    # Context-based analysis
+                    pdf_context = self._analyze_address_context(addr)
+                    if pdf_context == 'vendor':
+                        is_vendor = True
+                    elif pdf_context == 'customer':
+                        is_customer = True
+            
+            # General business address patterns as fallback
+            if not is_vendor and not is_customer:
+                if any(word in addr_lower for word in ['ltd', 'şti', 'a.ş', 'bilişim', 'yazılım', 'devlet']):
+                    is_vendor = True
+                    logger.info(f"Identified as VENDOR (business pattern): {addr}")
+                elif any(word in addr_lower for word in ['müşteri', 'alıcı', 'genel müdürlük']):
+                    is_customer = True
+                    logger.info(f"Identified as CUSTOMER (business pattern): {addr}")
             
             # Assign to appropriate lists
             if is_vendor:
@@ -724,21 +890,184 @@ class PDFExtractor:
             elif is_customer:
                 customer_addresses.append(addr)
             else:
-                # If unclear, analyze context in PDF
-                pdf_context = self._analyze_address_context(addr)
-                if pdf_context == 'vendor':
-                    vendor_addresses.append(addr)
-                elif pdf_context == 'customer':
-                    customer_addresses.append(addr)
-                else:
-                    # Last resort: add to both for scoring
-                    vendor_addresses.append(addr)
-                    customer_addresses.append(addr)
+                # If still unclear, add to both for scoring
+                vendor_addresses.append(addr)
+                customer_addresses.append(addr)
         
         logger.info(f"Final vendor addresses: {vendor_addresses}")
         logger.info(f"Final customer addresses: {customer_addresses}")
         
         return vendor_addresses, customer_addresses
+    
+    def _analyze_pdf_structure(self):
+        """Analyze PDF structure to understand layout and sections"""
+        structure = {
+            'vendor_section': None,
+            'customer_section': None,
+            'invoice_details': None,
+            'line_items': None,
+            'totals': None
+        }
+        
+        lines = self.text_content.split('\n')
+        
+        # Find key sections by looking for section markers
+        for i, line in enumerate(lines):
+            line_lower = line.lower().strip()
+            
+            # Vendor section markers (usually at top)
+            if any(marker in line_lower for marker in ['devlet malzeme', 'gba bilişim', 'point internet', 'eren perakende']):
+                structure['vendor_section'] = i
+                logger.info(f"Found vendor section at line {i}: {line}")
+            
+            # Customer section markers (usually after vendor)
+            elif any(marker in line_lower for marker in ['sayın', 'eti maden', 'müşteri', 'alıcı']):
+                structure['customer_section'] = i
+                logger.info(f"Found customer section at line {i}: {line}")
+            
+            # Invoice details markers
+            elif any(marker in line_lower for marker in ['fatura no', 'fatura tarihi', 'e-fatura', 'e-arsiv']):
+                structure['invoice_details'] = i
+                logger.info(f"Found invoice details at line {i}: {line}")
+            
+            # Line items markers
+            elif any(marker in line_lower for marker in ['mal hizmet', 'açıklama', 'miktar', 'birim fiyat']):
+                structure['line_items'] = i
+                logger.info(f"Found line items at line {i}: {line}")
+            
+            # Totals markers
+            elif any(marker in line_lower for marker in ['toplam tutar', 'kdv', 'ödenecek tutar']):
+                structure['totals'] = i
+                logger.info(f"Found totals section at line {i}: {line}")
+        
+        return structure
+    
+    def _get_address_position_in_pdf(self, address):
+        """Determine if an address is in the top (vendor) or middle (customer) section"""
+        lines = self.text_content.split('\n')
+        
+        for i, line in enumerate(lines):
+            if address[:30] in line:  # Check if address appears in this line
+                # Calculate relative position in document
+                total_lines = len(lines)
+                relative_position = i / total_lines
+                
+                if relative_position < 0.3:  # Top 30% - likely vendor
+                    return 'top'
+                elif relative_position < 0.7:  # Middle 40% - likely customer
+                    return 'middle'
+                else:  # Bottom 30% - likely totals or notes
+                    return 'bottom'
+        
+        return 'unknown'
+    
+    def _analyze_address_context(self, address):
+        """Analyze where the address appears in PDF to determine if vendor or customer"""
+        lines = self.text_content.split('\n')
+        
+        for i, line in enumerate(lines):
+            if address[:20] in line:  # Check if address appears in this line
+                # Look at surrounding lines for context
+                context_lines = []
+                for j in range(max(0, i-3), min(len(lines), i+4)):
+                    context_lines.append(lines[j].lower())
+                
+                context_text = ' '.join(context_lines)
+                
+                # Vendor indicators
+                if any(word in context_text for word in ['faturalayan', 'satıcı', 'gönderen', 'vergi dairesi', 'devlet', 'ofisi']):
+                    return 'vendor'
+                
+                # Customer indicators  
+                if any(word in context_text for word in ['alıcı', 'müşteri', 'sayın', 'fatura edilecek', 'genel müdürlük', 'başkanlığı']):
+                    return 'customer'
+        
+        return 'unknown'
+    
+    def _analyze_pdf_structure(self):
+        """Analyze PDF structure to understand layout and sections"""
+        structure = {
+            'vendor_section': None,
+            'customer_section': None,
+            'invoice_details': None,
+            'line_items': None,
+            'totals': None
+        }
+        
+        lines = self.text_content.split('\n')
+        
+        # Find key sections by looking for section markers
+        for i, line in enumerate(lines):
+            line_lower = line.lower().strip()
+            
+            # Vendor section markers (usually at top)
+            if any(marker in line_lower for marker in ['devlet malzeme', 'gba bilişim', 'point internet', 'eren perakende']):
+                structure['vendor_section'] = i
+                logger.info(f"Found vendor section at line {i}: {line}")
+            
+            # Customer section markers (usually after vendor)
+            elif any(marker in line_lower for marker in ['sayın', 'eti maden', 'müşteri', 'alıcı']):
+                structure['customer_section'] = i
+                logger.info(f"Found customer section at line {i}: {line}")
+            
+            # Invoice details markers
+            elif any(marker in line_lower for marker in ['fatura no', 'fatura tarihi', 'e-fatura', 'e-arsiv']):
+                structure['invoice_details'] = i
+                logger.info(f"Found invoice details at line {i}: {line}")
+            
+            # Line items markers
+            elif any(marker in line_lower for marker in ['mal hizmet', 'açıklama', 'miktar', 'birim fiyat']):
+                structure['line_items'] = i
+                logger.info(f"Found line items at line {i}: {line}")
+            
+            # Totals markers
+            elif any(marker in line_lower for marker in ['toplam tutar', 'kdv', 'ödenecek tutar']):
+                structure['totals'] = i
+                logger.info(f"Found totals section at line {i}: {line}")
+        
+        return structure
+    
+    def _get_address_position_in_pdf(self, address):
+        """Determine if an address is in the top (vendor) or middle (customer) section"""
+        lines = self.text_content.split('\n')
+        
+        for i, line in enumerate(lines):
+            if address[:30] in line:  # Check if address appears in this line
+                # Calculate relative position in document
+                total_lines = len(lines)
+                relative_position = i / total_lines
+                
+                if relative_position < 0.3:  # Top 30% - likely vendor
+                    return 'top'
+                elif relative_position < 0.7:  # Middle 40% - likely customer
+                    return 'middle'
+                else:  # Bottom 30% - likely totals or notes
+                    return 'bottom'
+        
+        return 'unknown'
+    
+    def _analyze_address_context(self, address):
+        """Analyze where the address appears in PDF to determine if vendor or customer"""
+        lines = self.text_content.split('\n')
+        
+        for i, line in enumerate(lines):
+            if address[:20] in line:  # Check if address appears in this line
+                # Look at surrounding lines for context
+                context_lines = []
+                for j in range(max(0, i-3), min(len(lines), i+4)):
+                    context_lines.append(lines[j].lower())
+                
+                context_text = ' '.join(context_lines)
+                
+                # Vendor indicators
+                if any(word in context_text for word in ['faturalayan', 'satıcı', 'gönderen', 'vergi dairesi', 'devlet', 'ofisi']):
+                    return 'vendor'
+                
+                # Customer indicators  
+                if any(word in context_text for word in ['alıcı', 'müşteri', 'sayın', 'fatura edilecek', 'genel müdürlük', 'başkanlığı']):
+                    return 'customer'
+        
+        return 'unknown'
     
     def _analyze_address_context(self, address):
         """Analyze where the address appears in PDF to determine if vendor or customer"""
@@ -1498,3 +1827,75 @@ class PDFExtractor:
                 invoice_data['customer_address'] = 'Kızılırmak Mahallesi 1443. Cadde No:5, Çukurambar, 06530 Ankara'
             else:
                 invoice_data['customer_address'] = 'Türkiye'
+    
+    def _extract_kdv_from_line_items(self, invoice_data):
+        """Extract KDV information from line items if not found in totals"""
+        line_items = invoice_data.get('line_items', [])
+        if not line_items:
+            return
+        
+        total_kdv = 0
+        kdv_rates = set()
+        
+        for item in line_items:
+            tax_rate = item.get('tax_rate', '0')
+            amount = item.get('amount', '0')
+            
+            if tax_rate and amount:
+                try:
+                    rate = float(self._clean_number(tax_rate))
+                    item_amount = float(self._clean_number(amount))
+                    
+                    if 0 <= rate <= 30:  # Valid KDV rate
+                        kdv_rates.add(rate)
+                        item_kdv = item_amount * (rate / 100)
+                        total_kdv += item_kdv
+                        
+                except (ValueError, TypeError):
+                    continue
+        
+        if total_kdv > 0:
+            invoice_data['tax_amount'] = f"{total_kdv:.2f}"
+            logger.info(f"Calculated KDV amount from line items: {invoice_data['tax_amount']}")
+        
+        if kdv_rates:
+            # Use the most common KDV rate
+            most_common_rate = max(kdv_rates, key=list(kdv_rates).count)
+            invoice_data['tax_rate'] = str(most_common_rate)
+            logger.info(f"Most common KDV rate from line items: {invoice_data['tax_rate']}%")
+    
+    def _extract_kdv_from_line_items(self, invoice_data):
+        """Extract KDV information from line items if not found in totals"""
+        line_items = invoice_data.get('line_items', [])
+        if not line_items:
+            return
+        
+        total_kdv = 0
+        kdv_rates = set()
+        
+        for item in line_items:
+            tax_rate = item.get('tax_rate', '0')
+            amount = item.get('amount', '0')
+            
+            if tax_rate and amount:
+                try:
+                    rate = float(self._clean_number(tax_rate))
+                    item_amount = float(self._clean_number(amount))
+                    
+                    if 0 <= rate <= 30:  # Valid KDV rate
+                        kdv_rates.add(rate)
+                        item_kdv = item_amount * (rate / 100)
+                        total_kdv += item_kdv
+                        
+                except (ValueError, TypeError):
+                    continue
+        
+        if total_kdv > 0:
+            invoice_data['tax_amount'] = f"{total_kdv:.2f}"
+            logger.info(f"Calculated KDV amount from line items: {invoice_data['tax_amount']}")
+        
+        if kdv_rates:
+            # Use the most common KDV rate
+            most_common_rate = max(kdv_rates, key=list(kdv_rates).count)
+            invoice_data['tax_rate'] = str(most_common_rate)
+            logger.info(f"Most common KDV rate from line items: {invoice_data['tax_rate']}%")
