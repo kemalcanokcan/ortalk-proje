@@ -757,10 +757,11 @@ def main():
                   <div class="modern-card-body">
                 """,
                 unsafe_allow_html=True,
+                
             )
             uploaded_file = st.file_uploader(
                 "PDF dosyasını seçin veya sürükleyip bırakın",
-                type="pdf",
+                type=["pdf", "jpg", "jpeg", "png"],
                 help="Maksimum dosya boyutu: 25MB",
                 label_visibility="collapsed"
             )
@@ -784,7 +785,14 @@ def main():
         st.markdown("---")
         
         # Save the uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+        # Dosya uzantısını al
+        file_ext = os.path.splitext(uploaded_file.name)[-1].lower()
+        if file_ext not in [".pdf", ".jpg", ".jpeg", ".png"]:
+            st.error("Sadece PDF veya resim dosyası yükleyebilirsiniz.")
+            return
+
+        # Geçici dosyayı uygun uzantı ile kaydet
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             pdf_path = tmp_file.name
         

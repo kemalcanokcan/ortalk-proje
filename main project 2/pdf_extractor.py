@@ -2,11 +2,14 @@ import pdfplumber
 import re
 from datetime import datetime
 import logging
-
+import pytesseract
+from pdf2image import convert_from_path
+from PIL import Image
+import os
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 def extract_firma_adi(text, max_lines=1):
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     if not lines:
@@ -23,39 +26,58 @@ class PDFExtractor:
         self.tables = []
         
     def extract_all_text(self):
-        """Extract all text content from the PDF"""
+        """Extract all text content from the PDF or image using OCR if needed"""
         try:
-            with pdfplumber.open(self.pdf_path) as pdf:
-                if not pdf.pages:
-                    logger.warning("PDF has no pages")
-                    return ""
-                
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        self.text_content += page_text + "\n"
-                    else:
-                        logger.warning(f"No text found on page {page.page_number}")
-                        
-            if not self.text_content.strip():
-                logger.warning("No text content extracted from PDF")
-                
-            return self.text_content
+            # PDF dosyası ise
+            if self.pdf_path.lower().endswith('.pdf'):
+                self.text_content = ""
+                with pdfplumber.open(self.pdf_path) as pdf:
+                    if not pdf.pages:
+                        logger.warning("PDF has no pages")
+                        return ""
+                    for page in pdf.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            self.text_content += page_text + "\n"
+                        else:
+                            logger.warning(f"No text found on page {page.page_number}")
+                # Eğer metin yoksa, OCR ile dene
+                if not self.text_content.strip():
+                    logger.warning("No text content extracted from PDF, trying OCR...")
+                    images = convert_from_path(self.pdf_path)
+                    ocr_text = ""
+                    for img in images:
+                        ocr_text += pytesseract.image_to_string(img, lang='tur')
+                    self.text_content = ocr_text
+                return self.text_content
+
+            # Resim dosyası ise (jpg, png, vb.)
+            elif self.pdf_path.lower().endswith(('.jpg', '.jpeg', '.png')):
+                img = Image.open(self.pdf_path)
+                self.text_content = pytesseract.image_to_string(img, lang='tur')
+                return self.text_content
+
+            else:
+                logger.error("Unsupported file type for text extraction")
+                self.text_content = ""
+                return ""
         except FileNotFoundError:
-            logger.error(f"PDF file not found: {self.pdf_path}")
-            raise FileNotFoundError("PDF dosyası bulunamadı")
+            logger.error(f"File not found: {self.pdf_path}")
+            raise FileNotFoundError("Dosya bulunamadı")
         except Exception as e:
-            logger.error(f"Error extracting text from PDF: {str(e)}")
-            raise Exception(f"PDF'den metin çıkarılırken hata oluştu: {str(e)}")
-    
+            logger.error(f"Error extracting text: {str(e)}")
+            raise Exception(f"Metin çıkarılırken hata oluştu: {str(e)}")
     def extract_tables(self):
-        """Extract tables from the PDF"""
+        """Extract tables from the PDF (only if file is PDF)"""
         try:
+            if not self.pdf_path.lower().endswith('.pdf'):
+                logger.info("Tablo çıkarma sadece PDF dosyaları için geçerlidir.")
+                return []
+            import pdfplumber
             with pdfplumber.open(self.pdf_path) as pdf:
                 if not pdf.pages:
                     logger.warning("PDF has no pages for table extraction")
                     return []
-                
                 for page in pdf.pages:
                     try:
                         tables = page.extract_tables()
@@ -67,7 +89,6 @@ class PDFExtractor:
                     except Exception as page_error:
                         logger.warning(f"Error extracting tables from page {page.page_number}: {str(page_error)}")
                         continue
-                        
             logger.info(f"Total tables extracted: {len(self.tables)}")
             return self.tables
         except FileNotFoundError:
@@ -76,8 +97,6 @@ class PDFExtractor:
         except Exception as e:
             logger.error(f"Error extracting tables from PDF: {str(e)}")
             raise Exception(f"PDF'den tablo çıkarılırken hata oluştu: {str(e)}")
-    
-
     def extract_invoice_data(self):
         """Extract structured invoice data from the PDF"""
         try:
