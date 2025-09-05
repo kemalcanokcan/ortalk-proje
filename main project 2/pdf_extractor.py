@@ -6,6 +6,7 @@ import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
 import os
+from image_utils import resize_by_duplication
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -25,40 +26,50 @@ class PDFExtractor:
         self.text_content = ""
         self.tables = []
         
+    from image_utils import resize_by_duplication
+
     def extract_all_text(self):
-        """Extract all text content from the PDF or image using OCR if needed"""
+        """PDF veya resimden metin çıkarır, gerekirse OCR fallback uygular"""
         try:
-            # PDF dosyası ise
             if self.pdf_path.lower().endswith('.pdf'):
-                self.text_content = ""
+                # Önce pdfplumber ile metin çıkar
+                import pdfplumber
+                text = ""
                 with pdfplumber.open(self.pdf_path) as pdf:
-                    if not pdf.pages:
-                        logger.warning("PDF has no pages")
-                        return ""
                     for page in pdf.pages:
                         page_text = page.extract_text()
                         if page_text:
-                            self.text_content += page_text + "\n"
-                        else:
-                            logger.warning(f"No text found on page {page.page_number}")
-                # Eğer metin yoksa, OCR ile dene
+                            text += page_text + "\n"
+                self.text_content = text
+
+                # Eğer metin yoksa, OCR fallback
                 if not self.text_content.strip():
-                    logger.warning("No text content extracted from PDF, trying OCR...")
-                    images = convert_from_path(self.pdf_path)
+                    from pdf2image import convert_from_path
+                    from PIL import Image
+                    import pytesseract
+                    import tempfile
                     ocr_text = ""
+                    images = convert_from_path(self.pdf_path)
                     for img in images:
-                        ocr_text += pytesseract.image_to_string(img, lang='tur')
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_img:
+                            img.save(tmp_img.name)
+                            # İstersen burada resize_by_duplication ile büyütebilirsin
+                            # resize_by_duplication(tmp_img.name, tmp_img.name, scale=4)
+                            ocr_text += pytesseract.image_to_string(Image.open(tmp_img.name), lang='tur')
                     self.text_content = ocr_text
+
                 return self.text_content
 
-            # Resim dosyası ise (jpg, png, vb.)
             elif self.pdf_path.lower().endswith(('.jpg', '.jpeg', '.png')):
+                from PIL import Image
+                import pytesseract
+                import tempfile
+                # İstersen burada resize_by_duplication ile büyütebilirsin
                 img = Image.open(self.pdf_path)
                 self.text_content = pytesseract.image_to_string(img, lang='tur')
                 return self.text_content
 
             else:
-                logger.error("Unsupported file type for text extraction")
                 self.text_content = ""
                 return ""
         except FileNotFoundError:
@@ -66,7 +77,7 @@ class PDFExtractor:
             raise FileNotFoundError("Dosya bulunamadı")
         except Exception as e:
             logger.error(f"Error extracting text: {str(e)}")
-            raise Exception(f"Metin çıkarılırken hata oluştu: {str(e)}")
+            raise Exception(f"Metin çıkarılırken hata oluştu:{str(e)}")
     def extract_tables(self):
         """Extract tables from the PDF (only if file is PDF)"""
         try:

@@ -15,7 +15,7 @@ from xml_converter import XMLConverter
 from geo_mapper import GeoMapper
 from address_parser import AddressParser
 from google_geocoder import geocode_structured
-
+from image_utils import resize_by_duplication
 # Set page configuration
 st.set_page_config(
     page_title="E-Fatura Analiz",
