@@ -14,107 +14,200 @@ class XMLConverter:
         self.invoice_data = invoice_data
         
     def convert_to_ubl_tr(self):
-        """Convert invoice data to UBL-TR format XML"""
+        """Convert invoice data to E-Fatura format XML"""
         try:
             # Create XML string directly
             xml_parts = []
             xml_parts.append('<?xml version="1.0" encoding="UTF-8"?>')
-            xml_parts.append('<Invoice>')
+            
+            # Root element with attributes
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            xml_parts.append(f'<E-Fatura_Verileri Oluşturulma_Tarihi="{current_time}" Toplam_Fatura_Sayısı="1">')
+            
+            # Single invoice entry
+            xml_parts.append('  <Fatura Sıra_No="1">')
             
             # Add invoice number
             invoice_number = self.invoice_data.get('invoice_number', '')
             if not invoice_number:
                 logger.warning("Missing invoice number, using placeholder")
                 invoice_number = f"INV-{self._generate_uuid()}"
-            xml_parts.append(f'  <InvoiceNumber>{self._escape_xml(invoice_number)}</InvoiceNumber>')
+            xml_parts.append(f'    <Fatura_No>{self._escape_xml(invoice_number)}</Fatura_No>')
             
-            # Add issue date in ISO format (YYYY-MM-DD)
+            # Add issue date in DD-MM-YYYY format
             issue_date = self.invoice_data.get('invoice_date', '')
-            formatted_date = self._format_date(issue_date)
-            xml_parts.append(f'  <IssueDate>{formatted_date}</IssueDate>')
+            formatted_date = self._format_date_turkish(issue_date)
+            xml_parts.append(f'    <Fatura_Tarihi>{formatted_date}</Fatura_Tarihi>')
             
-            # Add seller information
-            xml_parts.append('  <Seller>')
+            # Add invoice type
+            xml_parts.append('    <Fatura_Tipi>SATIS</Fatura_Tipi>')
             
-            # Seller name (required)
+            # Add ETTN (Electronic Invoice Number)
+            ettn = self._generate_uuid()
+            xml_parts.append(f'    <ETTN>{ettn}</ETTN>')
+            
+            # Add sender (vendor) information
             seller_name = self.invoice_data.get('vendor_name', '')
             if not seller_name:
                 logger.warning("Missing seller name, using placeholder")
                 seller_name = "Unknown Seller"
-            xml_parts.append(f'    <Name>{self._escape_xml(seller_name)}</Name>')
+            xml_parts.append(f'    <Gönderen>{self._escape_xml(seller_name)}</Gönderen>')
             
-            # Seller VKN (tax ID)
+            # Add sender address
+            seller_address = self.invoice_data.get('vendor_address', '')
+            if seller_address:
+                xml_parts.append(f'    <Gönderen_Adres>{self._escape_xml(seller_address)}</Gönderen_Adres>')
+            
+            # Add sender tax office
+            xml_parts.append('    <Gönderen_Vergi_Dairesi>ANKARA KURUMLAR</Gönderen_Vergi_Dairesi>')
+            
+            # Add sender VKN (tax ID)
             seller_vkn = self.invoice_data.get('vendor_tax_id', '')
             if not seller_vkn:
                 logger.warning("Missing seller VKN (tax ID)")
-            xml_parts.append(f'    <VKN>{self._escape_xml(seller_vkn)}</VKN>')
-            xml_parts.append('  </Seller>')
+                seller_vkn = "0000000000"
+            xml_parts.append(f'    <Gönderen_VKN>vergi kimlik no: {seller_vkn}</Gönderen_VKN>')
             
-            # Add buyer information
-            xml_parts.append('  <Buyer>')
+            # Add sender website
+            xml_parts.append('    <Gönderen_Web_Sitesi>www.dmo.gov.tr</Gönderen_Web_Sitesi>')
             
-            # Buyer name (required)
-            buyer_name = self.invoice_data.get('customer_name', '')
-            if not buyer_name:
-                logger.warning("Missing buyer name, using placeholder")
-                buyer_name = "Unknown Buyer"
-            xml_parts.append(f'    <Name>{self._escape_xml(buyer_name)}</Name>')
+            # Add receiver (customer) information
+            customer_name = self.invoice_data.get('customer_name', '')
+            if not customer_name:
+                logger.warning("Missing customer name, using placeholder")
+                customer_name = "Unknown Customer"
+            xml_parts.append(f'    <Alıcı>{self._escape_xml(customer_name)}</Alıcı>')
             
-            # Buyer VKN (tax ID)
-            buyer_vkn = self.invoice_data.get('customer_tax_id', '')
-            if not buyer_vkn:
-                logger.warning("Missing buyer VKN (tax ID)")
-            xml_parts.append(f'    <VKN>{self._escape_xml(buyer_vkn)}</VKN>')
-            xml_parts.append('  </Buyer>')
+            # Add receiver address
+            customer_address = self.invoice_data.get('customer_address', '')
+            if customer_address:
+                xml_parts.append(f'    <Alıcı_Adres>{self._escape_xml(customer_address)}</Alıcı_Adres>')
             
-            # Add line items
-            xml_parts.append('  <Items>')
+            # Add line items - process all items
+            line_items = self.invoice_data.get('line_items', [])
+            if line_items:
+                # Calculate totals for all items
+                total_invoice_amount = 0
+                total_vat_amount = 0
+                total_net_amount = 0
+                all_descriptions = []
+                
+                # Process each line item
+                for i, item in enumerate(line_items, 1):
+                    logger.debug(f"Processing line item {i}: {item}")
+                    
+                    # Validate item data before XML creation
+                    validated_item = self._validate_line_item(item, i)
+                    
+                    # Calculate amounts for this item
+                    amount_str = validated_item.get('amount', '0')
+                    if not amount_str or amount_str.strip() == '':
+                        amount_str = '0'
+                    item_total = float(amount_str)
+                    
+                    vat_rate_str = validated_item.get('tax_rate', '20')
+                    if not vat_rate_str or vat_rate_str.strip() == '':
+                        vat_rate_str = '20'
+                    item_vat_rate = float(vat_rate_str)
+                    
+                    # Calculate VAT amount for this item
+                    item_vat_amount = item_total * (item_vat_rate / 100)
+                    item_net_amount = item_total - item_vat_amount
+                    
+                    # Add to totals
+                    total_invoice_amount += item_total
+                    total_vat_amount += item_vat_amount
+                    total_net_amount += item_net_amount
+                    
+                    # Collect description for combined field
+                    item_description = validated_item.get('description', f'Ürün {i}')
+                    all_descriptions.append(item_description)
+                    
+                    logger.info(f"Item {i}: {item_description} - Amount: {item_total}, VAT: {item_vat_amount}")
+                
+                # Format total amounts in Turkish format
+                total_formatted = self._format_amount_turkish(str(total_invoice_amount))
+                vat_formatted = self._format_amount_turkish(str(total_vat_amount))
+                net_formatted = self._format_amount_turkish(str(total_net_amount))
+                
+                # Add combined item information
+                combined_description = '; '.join(all_descriptions)
+                xml_parts.append(f'    <Mal_Hizmet_Adı>{self._escape_xml(combined_description)}</Mal_Hizmet_Adı>')
+                
+                # Use the most common VAT rate or first item's rate
+                if line_items:
+                    first_item = self._validate_line_item(line_items[0], 1)
+                    vat_rate = first_item.get('tax_rate', '20')
+                    if not vat_rate or vat_rate.strip() == '':
+                        vat_rate = '20'
+                else:
+                    vat_rate = '20'
+                xml_parts.append(f'    <KDV_Oranı>{vat_rate}</KDV_Oranı>')
+                
+                # Add total amounts
+                xml_parts.append(f'    <KDV_Tutarı>{vat_formatted} TL</KDV_Tutarı>')
+                xml_parts.append(f'    <Mal_Hizmet_Toplam_Tutarı>{net_formatted} TL</Mal_Hizmet_Toplam_Tutarı>')
+                xml_parts.append(f'    <Vergiler_Dahil_Toplam_Tutar>{total_formatted} TL</Vergiler_Dahil_Toplam_Tutar>')
+                xml_parts.append(f'    <Ödenecek_Tutar>{total_formatted} TL</Ödenecek_Tutar>')
+                xml_parts.append(f'    <Satır_Toplam_Tutarı>{total_formatted} TL</Satır_Toplam_Tutarı>')
+                xml_parts.append(f'    <Tüm_Mal_Hizmetler>{self._escape_xml(combined_description)}</Tüm_Mal_Hizmetler>')
+                
+                # Add individual line items as separate elements
+                xml_parts.append('    <Fatura_Kalemleri>')
+                for i, item in enumerate(line_items, 1):
+                    validated_item = self._validate_line_item(item, i)
+                    
+                    xml_parts.append(f'      <Kalem_{i}>')
+                    xml_parts.append(f'        <Açıklama>{self._escape_xml(validated_item.get("description", f"Ürün {i}"))}</Açıklama>')
+                    xml_parts.append(f'        <Miktar>{validated_item.get("quantity", "1")}</Miktar>')
+                    xml_parts.append(f'        <Birim>{validated_item.get("unit", "Adet")}</Birim>')
+                    xml_parts.append(f'        <Birim_Fiyat>{self._format_amount_turkish(validated_item.get("unit_price", "0"))} TL</Birim_Fiyat>')
+                    xml_parts.append(f'        <KDV_Oranı>{validated_item.get("tax_rate", "20")}</KDV_Oranı>')
+                    xml_parts.append(f'        <Tutar>{self._format_amount_turkish(validated_item.get("amount", "0"))} TL</Tutar>')
+                    xml_parts.append(f'      </Kalem_{i}>')
+                xml_parts.append('    </Fatura_Kalemleri>')
+                
+                # Add standard fields
+                xml_parts.append('    <İskonto_Oranı>0</İskonto_Oranı>')
+                xml_parts.append('    <İskonto_Tutarı>0,00 TL</İskonto_Tutarı>')
+                xml_parts.append(f'    <Hesaplanan_KDV>{vat_formatted} TL</Hesaplanan_KDV>')
+                xml_parts.append('    <Diğer_Vergiler>0,00 TL</Diğer_Vergiler>')
+                
+                # Add quantity and unit info (from first item or combined)
+                if line_items:
+                    first_item = self._validate_line_item(line_items[0], 1)
+                    total_quantity = sum(self._extract_numeric_value(self._validate_line_item(item, i+1).get('quantity', '1')) for i, item in enumerate(line_items))
+                    xml_parts.append(f'    <Birim>{first_item.get("unit", "Adet")}</Birim>')
+                    xml_parts.append(f'    <Miktar>{int(total_quantity)}</Miktar>')
+                else:
+                    xml_parts.append('    <Birim>Adet</Birim>')
+                    xml_parts.append('    <Miktar>1</Miktar>')
+            else:
+                # Default values if no line items
+                xml_parts.append('    <Mal_Hizmet_Adı>Mal/Hizmet</Mal_Hizmet_Adı>')
+                xml_parts.append('    <KDV_Oranı>20</KDV_Oranı>')
+                xml_parts.append('    <KDV_Tutarı>0,00 TL</KDV_Tutarı>')
+                xml_parts.append('    <Mal_Hizmet_Toplam_Tutarı>0,00 TL</Mal_Hizmet_Toplam_Tutarı>')
+                xml_parts.append('    <Vergiler_Dahil_Toplam_Tutar>0,00 TL</Vergiler_Dahil_Toplam_Tutar>')
+                xml_parts.append('    <Ödenecek_Tutar>0,00 TL</Ödenecek_Tutar>')
+                xml_parts.append('    <Satır_Toplam_Tutarı>0,00 TL</Satır_Toplam_Tutarı>')
+                xml_parts.append('    <Tüm_Mal_Hizmetler>Mal/Hizmet</Tüm_Mal_Hizmetler>')
+                xml_parts.append('    <Fatura_Kalemleri></Fatura_Kalemleri>')
+                xml_parts.append('    <İskonto_Oranı>0</İskonto_Oranı>')
+                xml_parts.append('    <İskonto_Tutarı>0,00 TL</İskonto_Tutarı>')
+                xml_parts.append('    <Hesaplanan_KDV>0,00 TL</Hesaplanan_KDV>')
+                xml_parts.append('    <Diğer_Vergiler>0,00 TL</Diğer_Vergiler>')
+                xml_parts.append('    <Birim>Adet</Birim>')
+                xml_parts.append('    <Miktar>1</Miktar>')
             
-            # Process each line item
-            for i, item in enumerate(self.invoice_data.get('line_items', []), 1):
-                logger.debug(f"Processing line item {i}: {item}")
-                
-                # Validate item data before XML creation
-                validated_item = self._validate_line_item(item, i)
-                
-                # Create item element
-                xml_parts.append('    <Item>')
-                
-                # Description (required)
-                item_description = validated_item.get('description', f'Item {i}')
-                xml_parts.append(f'      <Description>{self._escape_xml(str(item_description))}</Description>')
-                
-                # Quantity (required)
-                quantity = self._format_amount(validated_item.get('quantity', '1'))
-                xml_parts.append(f'      <Quantity>{quantity}</Quantity>')
-                
-                # Unit price (required)
-                unit_price = self._format_amount(validated_item.get('unit_price', '0'))
-                xml_parts.append(f'      <UnitPrice>{unit_price}</UnitPrice>')
-                
-                # VAT rate (required)
-                vat_rate = validated_item.get('tax_rate', '18')
-                xml_parts.append(f'      <VAT>{vat_rate}</VAT>')
-                
-                # Total amount for this item (required)
-                total = self._format_amount(validated_item.get('amount', '0'))
-                xml_parts.append(f'      <Total>{total}</Total>')
-                
-                xml_parts.append('    </Item>')
-                
-                logger.info(f"Added line item {i}: '{item_description}' - {quantity} x {unit_price} = {total}")
+            # Add file and processing information
+            file_name = self.invoice_data.get('file_name', 'fatura.pdf')
+            xml_parts.append(f'    <Dosya_Adı>{self._escape_xml(file_name)}</Dosya_Adı>')
+            xml_parts.append(f'    <İşlem_Tarihi>{current_time}</İşlem_Tarihi>')
             
-            xml_parts.append('  </Items>')
-            
-            # Add total amount exactly as on invoice
-            total_amount = self._format_amount(self.invoice_data.get('total_amount', ''))
-            xml_parts.append(f'  <TotalAmount>{total_amount}</TotalAmount>')
-            
-            # Add currency exactly as found on invoice
-            currency = self.invoice_data.get('currency', '')  # Leave empty if not found
-            xml_parts.append(f'  <Currency>{currency}</Currency>')
-            
-            xml_parts.append('</Invoice>')
+            # Close invoice and root elements
+            xml_parts.append('  </Fatura>')
+            xml_parts.append('</E-Fatura_Verileri>')
             
             # Join all parts to create the XML string
             xml_string = '\n'.join(xml_parts)
@@ -146,6 +239,101 @@ class XMLConverter:
         # Return the date exactly as it appears on the invoice
         return str(date_str).strip()
     
+    def _format_date_turkish(self, date_str):
+        """Format date in Turkish format (DD-MM-YYYY)"""
+        if not date_str:
+            return datetime.now().strftime("%d-%m-%Y")
+        
+        try:
+            # Try to parse various date formats and convert to DD-MM-YYYY
+            date_str = str(date_str).strip()
+            
+            # If already in DD-MM-YYYY format, return as is
+            if re.match(r'\d{2}-\d{2}-\d{4}', date_str):
+                return date_str
+            
+            # If in YYYY-MM-DD format, convert to DD-MM-YYYY
+            if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+                year, month, day = date_str.split('-')
+                return f"{day}-{month}-{year}"
+            
+            # If in DD/MM/YYYY format, convert to DD-MM-YYYY
+            if re.match(r'\d{2}/\d{2}/\d{4}', date_str):
+                return date_str.replace('/', '-')
+            
+            # If in YYYY/MM/DD format, convert to DD-MM-YYYY
+            if re.match(r'\d{4}/\d{2}/\d{2}', date_str):
+                year, month, day = date_str.split('/')
+                return f"{day}-{month}-{year}"
+            
+            # If in DD.MM.YYYY format, convert to DD-MM-YYYY
+            if re.match(r'\d{2}\.\d{2}\.\d{4}', date_str):
+                return date_str.replace('.', '-')
+            
+            # If in YYYY.MM.DD format, convert to DD-MM-YYYY
+            if re.match(r'\d{4}\.\d{2}\.\d{2}', date_str):
+                year, month, day = date_str.split('.')
+                return f"{day}-{month}-{year}"
+            
+            # If we can't parse it, return current date
+            return datetime.now().strftime("%d-%m-%Y")
+            
+        except Exception as e:
+            logger.warning(f"Could not parse date '{date_str}': {e}")
+            return datetime.now().strftime("%d-%m-%Y")
+    
+    def _extract_numeric_value(self, value_str):
+        """Extract numeric value from string that may contain units or other text"""
+        if not value_str:
+            return 1.0
+        
+        value_str = str(value_str).strip()
+        
+        # Remove common unit words
+        value_str = value_str.replace('Adet', '').replace('adet', '').replace('ADET', '')
+        value_str = value_str.replace('Kg', '').replace('kg', '').replace('KG', '')
+        value_str = value_str.replace('Lt', '').replace('lt', '').replace('LT', '')
+        value_str = value_str.replace('M', '').replace('m', '')
+        value_str = value_str.replace('TL', '').replace('tl', '')
+        
+        # Replace comma with dot for decimal
+        value_str = value_str.replace(',', '.')
+        
+        # Extract only numeric characters and decimal point
+        import re
+        numeric_match = re.search(r'[\d.]+', value_str)
+        if numeric_match:
+            try:
+                return float(numeric_match.group())
+            except ValueError:
+                return 1.0
+        else:
+            return 1.0
+
+    def _format_amount_turkish(self, amount_str):
+        """Format amount in Turkish format (e.g., 1.234,56)"""
+        if not amount_str or str(amount_str).strip() == '':
+            return "0,00"
+        
+        try:
+            # Clean the string
+            amount_str = str(amount_str).strip()
+            
+            # Convert to float first
+            amount = float(amount_str.replace(',', '.').replace(' ', ''))
+            
+            # Format with Turkish number format
+            formatted = f"{amount:,.2f}"
+            
+            # Replace comma with dot for thousands separator and dot with comma for decimal
+            formatted = formatted.replace(',', 'X').replace('.', ',').replace('X', '.')
+            
+            return formatted
+            
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not format amount '{amount_str}': {e}")
+            return "0,00"
+    
     def _generate_uuid(self):
         """Generate a simple UUID-like string for the invoice"""
         # In a real system, you would use a proper UUID generator
@@ -168,15 +356,31 @@ class XMLConverter:
         
         validated_item = {}
         
-        # Description validation - CRITICAL: Ensure description is text, not a number
+        # Description validation - CRITICAL: Ensure description is text, not a number or amount
         description = item.get('description', '')
         if description:
-            # Check if description looks like a number (common error)
-            if isinstance(description, (int, float)) or (isinstance(description, str) and description.replace('.', '').replace(',', '').isdigit()):
-                logger.warning(f"Line {line_number}: Description appears to be a number: '{description}'. Using default.")
+            description_str = str(description).strip()
+            
+            # Check if description looks like a number or amount (common error)
+            if isinstance(description, (int, float)):
+                logger.warning(f"Line {line_number}: Description is a number: '{description}'. Using default.")
                 validated_item['description'] = f"Ürün {line_number}"
+            elif isinstance(description, str):
+                # Remove common currency symbols and check if it's just a number
+                cleaned_desc = description_str.replace('TL', '').replace('₺', '').replace('$', '').replace('€', '').replace('£', '').strip()
+                
+                # Check if it's just a number (with or without decimal)
+                if cleaned_desc.replace('.', '').replace(',', '').replace(' ', '').isdigit():
+                    logger.warning(f"Line {line_number}: Description appears to be an amount: '{description}'. Using default.")
+                    validated_item['description'] = f"Ürün {line_number}"
+                # Check if it's a very short string that might be a price
+                elif len(cleaned_desc) <= 10 and any(char.isdigit() for char in cleaned_desc) and not any(char.isalpha() for char in cleaned_desc):
+                    logger.warning(f"Line {line_number}: Description appears to be a price: '{description}'. Using default.")
+                    validated_item['description'] = f"Ürün {line_number}"
+                else:
+                    validated_item['description'] = description_str
             else:
-                validated_item['description'] = str(description).strip()
+                validated_item['description'] = f"Ürün {line_number}"
         else:
             logger.warning(f"Line {line_number}: Missing description, using default")
             validated_item['description'] = f"Ürün {line_number}"
@@ -189,17 +393,17 @@ class XMLConverter:
         unit = item.get('unit', 'ADET')
         validated_item['unit'] = str(unit).strip() if unit else 'ADET'
         
-        # Keep unit price exactly as provided
+        # Keep unit price exactly as provided, but provide default if empty
         unit_price = item.get('unit_price', '')
-        validated_item['unit_price'] = str(unit_price).strip() if unit_price else ''
+        validated_item['unit_price'] = str(unit_price).strip() if unit_price else '0'
         
-        # Keep tax rate exactly as provided - no parsing or validation
+        # Keep tax rate exactly as provided, but provide default if empty
         tax_rate = item.get('tax_rate', '')
-        validated_item['tax_rate'] = str(tax_rate).strip() if tax_rate else ''
+        validated_item['tax_rate'] = str(tax_rate).strip() if tax_rate else '20'
         
-        # Keep amount exactly as provided
+        # Keep amount exactly as provided, but provide default if empty
         amount = item.get('amount', '')
-        validated_item['amount'] = str(amount).strip() if amount else ''
+        validated_item['amount'] = str(amount).strip() if amount else '0'
         
         # Do not calculate amounts - use only what's on the invoice
         

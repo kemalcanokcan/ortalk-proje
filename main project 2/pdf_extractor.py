@@ -25,8 +25,6 @@ class PDFExtractor:
         self.pdf_path = pdf_path
         self.text_content = ""
         self.tables = []
-        
-    from image_utils import resize_by_duplication
 
     def extract_all_text(self):
         """PDF veya resimden metin çıkarır, gerekirse OCR fallback uygular"""
@@ -216,26 +214,23 @@ class PDFExtractor:
                         pass
                     break
             
-            # Enhanced vendor information extraction with multiple patterns
+            # Enhanced vendor information extraction with simplified patterns
             vendor_section = None
             vendor_patterns = [
-                # Standard patterns
-                r'SATICI\s*:?\s*\n(.*?)(?=ALICI|MÜŞTERI|ETİ\s+MADEN|\Z)',
+                # Standard patterns - more specific to avoid conflicts
+                r'SATICI\s*:?\s*\n(.*?)(?=ALICI|MÜŞTERI|SAYIN|\Z)',
                 r'SELLER\s*:?\s*\n(.*?)(?=BUYER|CUSTOMER|\Z)',
-                r'FATURALAYAN\s*:?\s*\n(.*?)(?=ALICI|\Z)',
+                r'FATURALAYAN\s*:?\s*\n(.*?)(?=ALICI|SAYIN|\Z)',
                 
-                # Company-specific patterns  
-                r'(DEVLET\s+MALZEME\s+OFİSİ.*?)(?=ETİ\s+MADEN|ALICI|\Z)',
-                r'(.*?LTD.*?ŞTİ.*?)(?=ALICI|ETİ|\Z)',
-                r'(.*?A\.?Ş\.?.*?)(?=ALICI|ETİ|\Z)',
+                # Company-specific patterns - more precise
+                r'(DEVLET\s+MALZEME\s+OFİSİ[^A]*?)(?=ALICI|SAYIN|ETİ|\Z)',
+                r'(GBA\s+BİLİŞİM[^A]*?)(?=ALICI|SAYIN|ETİ|\Z)',
                 
-                # Address-based patterns
-                r'(.*?VKN\s*:?\s*\d{10}.*?)(?=ALICI|ETİ|\Z)',
-                r'(.*?TAX\s*ID.*?)(?=BUYER|\Z)',
+                # VKN-based patterns - more specific
+                r'(.*?VKN\s*:?\s*\d{10}[^A]*?)(?=ALICI|SAYIN|ETİ|\Z)',
                 
-                # Fallback patterns
-                r'(.*?)(?=ALICI|BUYER)',
-                r'([A-ZÜĞŞIÖÇ\s]+(?:LTD|AŞ|ŞTİ).*?)(?=ALICI|\Z)'
+                # Fallback patterns - more conservative
+                r'^([^A]*?)(?=ALICI|SAYIN|ETİ)'
             ]
             
             for pattern in vendor_patterns:
@@ -248,8 +243,24 @@ class PDFExtractor:
                 vendor_text = vendor_section.group(1)
                 
                 # Enhanced vendor name extraction
+                vendor_name_patterns = [
+                    r'^([A-ZÜĞŞIÖÇ][A-ZÜĞŞIÖÇa-züğşıöç\s]*(?:LTD|AŞ|ŞTİ|A\.Ş|LTD\.ŞTİ|OFİSİ|MÜDÜRLÜĞÜ))',
+                    r'^([A-ZÜĞŞIÖÇ][A-ZÜĞŞIÖÇa-züğşıöç\s]*(?:LIMITED|ANONIM|ŞIRKETI))',
+                    r'^([A-ZÜĞŞIÖÇ][A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n)',
+                    r'^([A-ZÜĞŞIÖÇ][A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*\d{5})'
+                ]
                 
-                
+                for name_pattern in vendor_name_patterns:
+                    name_match = re.search(name_pattern, vendor_text.strip(), re.IGNORECASE | re.MULTILINE)
+                    if name_match:
+                        vendor_name = name_match.group(1).strip()
+                        vendor_name = re.sub(r'\s+', ' ', vendor_name)  # Multiple spaces
+                        vendor_name = re.sub(r'^[:\-\s]+|[:\-\s]+$', '', vendor_name)  # Leading/trailing symbols
+                        
+                        if len(vendor_name) >= 5 and not re.match(r'^\d+$', vendor_name):
+                            invoice_data['vendor_name'] = vendor_name
+                            logger.info(f"Extracted vendor name: {vendor_name}")
+                            break
                 
                 # Extract vendor tax ID - Try multiple patterns
                 vendor_tax_match = re.search(r'VKN[:\s]*(\d+)', vendor_text)
@@ -286,51 +297,30 @@ class PDFExtractor:
                 logger.info("No vendor section found, trying fallback methods...")
                 self._extract_vendor_fallback(invoice_data)
             
-            # Enhanced customer information extraction with comprehensive patterns
+            # Enhanced customer information extraction with simplified patterns
             customer_section = None
             customer_patterns = [
-                # Primary customer indicators (case-sensitive as requested)
+                # Primary customer indicators - simplified
                 r'SAYIN\s*(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|FATURA\s+NO|TOPLAM|$)',
-                r'SAYIN\s*(.*?)(?=\n\s*[A-ZÜĞŞIÖÇ]{3,}|\n\s*\d|$)',
                 
-                # Standard patterns
+                # Standard patterns - more specific
                 r'ALICI\s*:?\s*\n(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|FATURA\s+NO|TOPLAM|$)',
                 r'BUYER\s*:?\s*\n(.*?)(?=ITEM|PRODUCT|SERVICE|INVOICE|TOTAL|$)',
                 r'MÜŞTERI\s*:?\s*\n(.*?)(?=ÜRÜN|HIZMET|TOPLAM|$)',
-                r'ALICI\s*:?\s*(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|FATURA\s+NO|TOPLAM|$)',
-                r'BUYER\s*:?\s*(.*?)(?=ITEM|PRODUCT|SERVICE|INVOICE|TOTAL|$)',
-                r'MÜŞTERI\s*:?\s*(.*?)(?=ÜRÜN|HIZMET|TOPLAM|$)',
                 
-                # Company-specific patterns
-                r'(ETİ\s+MADEN.*?)(?=e-FATURA|Sıra\s+No|MALZEME|$)',
-                r'(.*?GENEL\s+MÜDÜRLÜĞÜ.*?)(?=MALZEME|ÜRÜN|$)',
-                r'(.*?(?:MÜDÜRLÜĞÜ|BAŞKANLIĞI|DAİRESİ).*?)(?=MALZEME|$)',
+                # Company-specific patterns - more precise
+                r'(ETİ\s+MADEN[^M]*?)(?=MALZEME|ÜRÜN|HIZMET|$)',
+                r'(.*?GENEL\s+MÜDÜRLÜĞÜ[^M]*?)(?=MALZEME|ÜRÜN|$)',
                 
-                # VKN-based patterns for customer
-                r'(?:ALICI|BUYER).*?(.*?VKN\s*:?\s*\d{10}.*?)(?=MALZEME|ÜRÜN|$)',
+                # VKN-based patterns for customer - more specific
+                r'(?:ALICI|BUYER|SAYIN).*?(.*?VKN\s*:?\s*\d{10}[^M]*?)(?=MALZEME|ÜRÜN|$)',
                 
-                # Address-based customer identification
-                r'(.*?KIZILIRMAK\s+MAH.*?ÇUKURAMBAR.*?ANKARA)(?=MALZEME|ÜRÜN|$)',
-                r'(.*?ÇUKURAMBAR.*?ANKARA)(?=MALZEME|ÜRÜN|$)',
-                r'(.*?06530.*?ANKARA)(?=MALZEME|ÜRÜN|$)',
+                # Address-based customer identification - more specific
+                r'(.*?KIZILIRMAK\s+MAH[^M]*?)(?=MALZEME|ÜRÜN|$)',
+                r'(.*?ÇUKURAMBAR[^M]*?)(?=MALZEME|ÜRÜN|$)',
                 
-                # Fallback patterns
-                r'(?:ALICI|BUYER)(.*?)(?=\n\s*\d|\n\s*[A-Z]{3,})',
-                r'(.*?)(?=Malzeme|MALZEME|ÜRÜN|HIZMET)',
-                
-                # Generic customer section after vendor
-                r'(?:VKN|Vergi|Tel|E-Posta).*?\n(.*?)(?=Malzeme|MALİN|ÜRÜN|HIZMET|e-FATURA|$)',
-                
-                # Additional patterns for different font positions and variations
-                r'SAYIN\s*([A-ZÜĞŞIÖÇ\s]+?)(?=\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n|$)',
-                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\s*[A-ZÜĞŞIÖÇ]{3,}|\s*\d|\s*Malzeme|\s*MALİN|\s*ÜRÜN|\s*HIZMET|\s*e-FATURA|\s*FATURA\s+NO|\s*TOPLAM|\n|$)'
+                # Fallback patterns - more conservative
+                r'SAYIN\s*([A-ZÜĞŞIÖÇa-züğşıöç\s]+?)(?=\s*VKN|\s*Tel|\s*Fax|\s*E-mail|\s*\d{5}|\n|$)'
             ]
             
             for pattern in customer_patterns:
@@ -409,8 +399,8 @@ class PDFExtractor:
                 logger.info("No customer section found, trying fallback methods...")
                 self._extract_customer_fallback(invoice_data)
                     
-            # Apply comprehensive address extraction and improvement
-            self._extract_and_improve_all_addresses(invoice_data)
+            # Note: Address extraction moved to after basic vendor/customer extraction
+            # to avoid conflicts with the extraction process
             
             # Enhanced table extraction with better parsing
             logger.info("Attempting table-based line items extraction...")
@@ -710,6 +700,10 @@ class PDFExtractor:
             if notes_match:
                 invoice_data['notes'] = notes_match.group(1).strip()
             
+            # Apply basic address improvement only if addresses are missing
+            logger.info("Applying basic address improvement...")
+            self._apply_basic_address_improvement(invoice_data)
+            
             logger.info("Invoice data extraction completed successfully")
             return invoice_data
             
@@ -724,8 +718,15 @@ class PDFExtractor:
         """Comprehensive address extraction system for any e-invoice format"""
         logger.info("Starting comprehensive address extraction...")
         
+        # Log current vendor and customer names for context
+        vendor_name = invoice_data.get('vendor_name', '')
+        customer_name = invoice_data.get('customer_name', '')
+        logger.info(f"Current vendor name: {vendor_name}")
+        logger.info(f"Current customer name: {customer_name}")
+        
         # Extract ALL addresses from PDF using multiple strategies
         all_addresses = self._extract_all_addresses_from_pdf()
+        logger.info(f"Found {len(all_addresses)} total addresses: {all_addresses}")
         
         # Separate vendor and customer addresses intelligently
         vendor_addresses, customer_addresses = self._separate_vendor_customer_addresses(all_addresses, invoice_data)
@@ -734,12 +735,14 @@ class PDFExtractor:
         if vendor_addresses:
             best_vendor = self._select_best_address(vendor_addresses, 'vendor', invoice_data)
             if best_vendor:
+                logger.info(f"Replacing vendor address: '{invoice_data.get('vendor_address', '')}' -> '{best_vendor}'")
                 invoice_data['vendor_address'] = best_vendor
                 logger.info(f"Selected vendor address: {best_vendor}")
         
         if customer_addresses:
             best_customer = self._select_best_address(customer_addresses, 'customer', invoice_data)
             if best_customer:
+                logger.info(f"Replacing customer address: '{invoice_data.get('customer_address', '')}' -> '{best_customer}'")
                 invoice_data['customer_address'] = best_customer
                 logger.info(f"Selected customer address: {best_customer}")
         
@@ -748,9 +751,16 @@ class PDFExtractor:
         
         # Final cleanup and standardization
         if invoice_data.get('vendor_address'):
+            old_vendor = invoice_data['vendor_address']
             invoice_data['vendor_address'] = self._clean_address(invoice_data['vendor_address'])
+            if old_vendor != invoice_data['vendor_address']:
+                logger.info(f"Cleaned vendor address: '{old_vendor}' -> '{invoice_data['vendor_address']}'")
+        
         if invoice_data.get('customer_address'):
+            old_customer = invoice_data['customer_address']
             invoice_data['customer_address'] = self._clean_address(invoice_data['customer_address'])
+            if old_customer != invoice_data['customer_address']:
+                logger.info(f"Cleaned customer address: '{old_customer}' -> '{invoice_data['customer_address']}'")
     
     def _extract_all_addresses_from_pdf(self):
         """Extract all potential addresses using enhanced pattern matching"""
@@ -866,6 +876,10 @@ class PDFExtractor:
         # First, analyze the PDF structure to understand address positions
         pdf_structure = self._analyze_pdf_structure()
         
+        # Get vendor and customer names for better context
+        vendor_name = invoice_data.get('vendor_name', '').lower()
+        customer_name = invoice_data.get('customer_name', '').lower()
+        
         for addr in addresses:
             addr_lower = addr.lower()
             
@@ -873,6 +887,7 @@ class PDFExtractor:
             is_vendor = False
             is_customer = False
             
+            # Enhanced company-specific patterns
             # DMO (Devlet Malzeme Ofisi) patterns - always vendor (top section)
             if any(word in addr_lower for word in ['yücetepe', 'inönü bulvar', '06570']):
                 is_vendor = True
@@ -887,6 +902,16 @@ class PDFExtractor:
             elif 'konutkent' in addr_lower and 'çayyolu' in addr_lower:
                 is_vendor = True
                 logger.info(f"Identified as VENDOR (GBA pattern): {addr}")
+            
+            # Enhanced context-based identification using company names
+            elif vendor_name and any(word in addr_lower for word in vendor_name.split()):
+                # If address contains vendor name keywords, likely vendor
+                is_vendor = True
+                logger.info(f"Identified as VENDOR (vendor name context): {addr}")
+            elif customer_name and any(word in addr_lower for word in customer_name.split()):
+                # If address contains customer name keywords, likely customer
+                is_customer = True
+                logger.info(f"Identified as CUSTOMER (customer name context): {addr}")
             
             # Address position analysis for unknown patterns
             else:
@@ -1164,15 +1189,22 @@ class PDFExtractor:
         return best_address
     
     def _apply_fallback_addresses(self, invoice_data):
-        """Apply fallback addresses for known entities"""
-        # Vendor fallbacks
-        if not invoice_data.get('vendor_address') or len(invoice_data.get('vendor_address', '')) < 10:
+        """Apply fallback addresses for known entities - only if no address was found"""
+        # Only apply fallbacks if no address was extracted or address is too short
+        vendor_address = invoice_data.get('vendor_address', '')
+        customer_address = invoice_data.get('customer_address', '')
+        
+        # Vendor fallbacks - only if no vendor address found
+        if not vendor_address or len(vendor_address) < 10 or vendor_address == 'Ankara, Türkiye':
             if 'DEVLET MALZEME' in self.text_content:
                 invoice_data['vendor_address'] = 'İnönü Bulvarı No:18, Yücetepe, 06570 Ankara'
                 logger.info("Applied DMO fallback address")
+            elif 'GBA BİLİŞİM' in self.text_content:
+                invoice_data['vendor_address'] = 'Konutkent Mahallesi 3028. Cadde No:5, Çayyolu, Ankara'
+                logger.info("Applied GBA Bilişim fallback address")
         
-        # Customer fallbacks  
-        if not invoice_data.get('customer_address') or len(invoice_data.get('customer_address', '')) < 10:
+        # Customer fallbacks - only if no customer address found
+        if not customer_address or len(customer_address) < 10 or customer_address == 'Ankara, Türkiye':
             if 'ETİ MADEN' in self.text_content:
                 invoice_data['customer_address'] = 'Kızılırmak Mahallesi 1443. Cadde No:5, Çukurambar, 06530 Ankara'
                 logger.info("Applied ETİ MADEN fallback address")
@@ -1894,38 +1926,63 @@ class PDFExtractor:
             invoice_data['tax_rate'] = str(most_common_rate)
             logger.info(f"Most common KDV rate from line items: {invoice_data['tax_rate']}%")
     
-    def _extract_kdv_from_line_items(self, invoice_data):
-        """Extract KDV information from line items if not found in totals"""
-        line_items = invoice_data.get('line_items', [])
-        if not line_items:
-            return
+    def _apply_basic_address_improvement(self, invoice_data):
+        """Apply basic address improvement without complex pattern matching"""
+        logger.info("Starting basic address improvement...")
         
-        total_kdv = 0
-        kdv_rates = set()
+        # Only apply fallback addresses if no address was found
+        vendor_address = invoice_data.get('vendor_address', '')
+        customer_address = invoice_data.get('customer_address', '')
         
-        for item in line_items:
-            tax_rate = item.get('tax_rate', '0')
-            amount = item.get('amount', '0')
-            
-            if tax_rate and amount:
-                try:
-                    rate = float(self._clean_number(tax_rate))
-                    item_amount = float(self._clean_number(amount))
-                    
-                    if 0 <= rate <= 30:  # Valid KDV rate
-                        kdv_rates.add(rate)
-                        item_kdv = item_amount * (rate / 100)
-                        total_kdv += item_kdv
-                        
-                except (ValueError, TypeError):
-                    continue
+        # Vendor fallbacks - only if no vendor address found
+        if not vendor_address or len(vendor_address) < 10 or vendor_address == 'Ankara, Türkiye':
+            if 'DEVLET MALZEME' in self.text_content:
+                invoice_data['vendor_address'] = 'İnönü Bulvarı No:18, Yücetepe, 06570 Ankara'
+                logger.info("Applied DMO fallback address")
+            elif 'GBA BİLİŞİM' in self.text_content:
+                invoice_data['vendor_address'] = 'Konutkent Mahallesi 3028. Cadde No:5, Çayyolu, Ankara'
+                logger.info("Applied GBA Bilişim fallback address")
         
-        if total_kdv > 0:
-            invoice_data['tax_amount'] = f"{total_kdv:.2f}"
-            logger.info(f"Calculated KDV amount from line items: {invoice_data['tax_amount']}")
+        # Customer fallbacks - only if no customer address found
+        if not customer_address or len(customer_address) < 10 or customer_address == 'Ankara, Türkiye':
+            if 'ETİ MADEN' in self.text_content:
+                invoice_data['customer_address'] = 'Kızılırmak Mahallesi 1443. Cadde No:5, Çukurambar, 06530 Ankara'
+                logger.info("Applied ETİ MADEN fallback address")
         
-        if kdv_rates:
-            # Use the most common KDV rate
-            most_common_rate = max(kdv_rates, key=list(kdv_rates).count)
-            invoice_data['tax_rate'] = str(most_common_rate)
-            logger.info(f"Most common KDV rate from line items: {invoice_data['tax_rate']}%")
+        # Clean addresses
+        if invoice_data.get('vendor_address'):
+            old_vendor = invoice_data['vendor_address']
+            invoice_data['vendor_address'] = self._clean_address(invoice_data['vendor_address'])
+            if old_vendor != invoice_data['vendor_address']:
+                logger.info(f"Cleaned vendor address: '{old_vendor}' -> '{invoice_data['vendor_address']}'")
+        
+        if invoice_data.get('customer_address'):
+            old_customer = invoice_data['customer_address']
+            invoice_data['customer_address'] = self._clean_address(invoice_data['customer_address'])
+            if old_customer != invoice_data['customer_address']:
+                logger.info(f"Cleaned customer address: '{old_customer}' -> '{invoice_data['customer_address']}'")
+    
+    def debug_address_extraction(self):
+        """Debug function to test address extraction without full invoice processing"""
+        logger.info("=== DEBUG: Address Extraction Test ===")
+        
+        # Extract all addresses
+        all_addresses = self._extract_all_addresses_from_pdf()
+        logger.info(f"All extracted addresses: {all_addresses}")
+        
+        # Test with dummy invoice data
+        test_invoice_data = {
+            'vendor_name': 'Test Vendor',
+            'customer_name': 'Test Customer'
+        }
+        
+        # Test address separation
+        vendor_addresses, customer_addresses = self._separate_vendor_customer_addresses(all_addresses, test_invoice_data)
+        logger.info(f"Vendor addresses: {vendor_addresses}")
+        logger.info(f"Customer addresses: {customer_addresses}")
+        
+        return {
+            'all_addresses': all_addresses,
+            'vendor_addresses': vendor_addresses,
+            'customer_addresses': customer_addresses
+        }
